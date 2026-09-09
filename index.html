@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DSA Study Tracker — Track Your Progress</title>
+  <meta name="description" content="A premium DSA Study Tracker to organize and track your LeetCode and GeeksForGeeks problem-solving progress across difficulty levels and categories." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ═══════ CONFETTI CANVAS ═══════ -->
+  <canvas id="confettiCanvas"></canvas>
+
+  <!-- ═══════ HEADER ═══════ -->
+  <header class="header" id="header">
+    <div class="header__inner">
+      <div class="header__brand">
+        <div class="header__logo">
+          <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" fill="url(#hg)"/><path d="M9 14l3 3 7-7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="hg" x1="2" y1="2" x2="26" y2="26"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs></svg>
+        </div>
+        <div>
+          <h1 class="header__title">DSA Tracker</h1>
+          <p class="header__subtitle">Track · Solve · Conquer</p>
+        </div>
+      </div>
+      <div class="header__actions">
+        <div class="search-box" id="searchBox">
+          <svg class="search-box__icon" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.8"/><path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <input type="text" id="searchInput" class="search-box__input" placeholder="Search questions, topics..." autocomplete="off" />
+          <kbd class="search-box__kbd">Ctrl+K</kbd>
+        </div>
+        <div class="header__btn-group">
+          <button class="btn btn--ghost" id="filterBtn" title="Filter">
+            <svg viewBox="0 0 20 20" fill="none" width="18" height="18"><path d="M2 4h16M5 10h10M8 16h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span>Filter</span>
+          </button>
+          <button class="btn btn--primary" id="addQuestionBtn">
+            <svg viewBox="0 0 20 20" fill="none" width="18" height="18"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>Add Question</span>
+          </button>
+          <button class="btn btn--ghost" id="dataMenuBtn" title="Data">
+            <svg viewBox="0 0 20 20" fill="none" width="18" height="18"><circle cx="10" cy="4" r="1.5" fill="currentColor"/><circle cx="10" cy="10" r="1.5" fill="currentColor"/><circle cx="10" cy="16" r="1.5" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════ DATA MENU DROPDOWN ═══════ -->
+  <div class="dropdown-menu" id="dataMenu">
+    <button class="dropdown-menu__item" id="exportBtn"><svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M10 3v10M6 9l4 4 4-4M3 15v2h14v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Export Progress</button>
+    <button class="dropdown-menu__item" id="importBtn"><svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M10 13V3M6 7l4-4 4 4M3 15v2h14v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Import Progress</button>
+    <div class="dropdown-menu__divider"></div>
+    <button class="dropdown-menu__item dropdown-menu__item--danger" id="resetBtn"><svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M4 6h12M8 6V4h4v2M6 6v10h8V6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Reset All Data</button>
+  </div>
+  <input type="file" id="importFileInput" accept=".json" style="display:none" />
+
+  <!-- ═══════ FILTER PANEL ═══════ -->
+  <div class="filter-panel" id="filterPanel">
+    <div class="filter-panel__inner">
+      <div class="filter-group">
+        <label class="filter-group__label">Status</label>
+        <div class="filter-chips" id="statusFilters">
+          <button class="chip chip--active" data-status="all">All</button>
+          <button class="chip" data-status="solved">✓ Solved</button>
+          <button class="chip" data-status="unsolved">○ Unsolved</button>
+          <button class="chip" data-status="starred">★ Starred</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label class="filter-group__label">Platform</label>
+        <div class="filter-chips" id="platformFilters">
+          <button class="chip chip--active" data-platform="all">All</button>
+          <button class="chip" data-platform="LeetCode">LeetCode</button>
+          <button class="chip" data-platform="GFG">GFG</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label class="filter-group__label">Frequency</label>
+        <div class="filter-chips" id="frequencyFilters">
+          <button class="chip chip--active" data-freq="all">All</button>
+          <button class="chip" data-freq="5">🔥 Very High</button>
+          <button class="chip" data-freq="4">High</button>
+          <button class="chip" data-freq="3">Medium</button>
+          <button class="chip" data-freq="2">Low</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MAIN CONTENT ═══════ -->
+  <main class="main">
+    <!-- ─── Stats Dashboard ─── -->
+    <section class="dashboard" id="dashboard">
+      <!-- Donut Chart Card -->
+      <div class="card card--donut" id="donutCard">
+        <div class="card__header">
+          <h2 class="card__title">DSA Progress</h2>
+          <button class="card__info-btn" id="infoBtn" title="Info">
+            <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M10 9v5M10 6.5v.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="donut-container">
+          <div class="donut-chart" id="donutChart">
+            <svg viewBox="0 0 160 160" class="donut-svg">
+              <circle class="donut-track" cx="80" cy="80" r="62" />
+              <circle class="donut-seg donut-seg--hard" id="donutHard" cx="80" cy="80" r="62" />
+              <circle class="donut-seg donut-seg--medium" id="donutMedium" cx="80" cy="80" r="62" />
+              <circle class="donut-seg donut-seg--easy" id="donutEasy" cx="80" cy="80" r="62" />
+            </svg>
+            <div class="donut-center">
+              <span class="donut-center__solved" id="totalSolved">0</span>
+              <div class="donut-center__divider"></div>
+              <span class="donut-center__total" id="totalQuestions">0</span>
+            </div>
+          </div>
+          <div class="donut-legend">
+            <div class="legend-item">
+              <span class="legend-dot legend-dot--easy"></span>
+              <span class="legend-label">Easy</span>
+              <span class="legend-value" id="legendEasy">0/0</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot legend-dot--medium"></span>
+              <span class="legend-label">Medium</span>
+              <span class="legend-value" id="legendMedium">0/0</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot legend-dot--hard"></span>
+              <span class="legend-label">Hard</span>
+              <span class="legend-value" id="legendHard">0/0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Category Breakdown -->
+      <div class="card card--categories" id="categoryCard">
+        <div class="card__header">
+          <h2 class="card__title">Category Breakdown</h2>
+        </div>
+        <div class="category-bars" id="categoryBars">
+          <!-- populated by JS -->
+        </div>
+      </div>
+
+      <!-- Streak & Stats -->
+      <div class="card card--stats" id="statsCard">
+        <div class="card__header">
+          <h2 class="card__title">Quick Stats</h2>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-item__icon stat-item__icon--fire">🔥</div>
+            <div class="stat-item__value" id="statStreak">0</div>
+            <div class="stat-item__label">Day Streak</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__icon stat-item__icon--star">⭐</div>
+            <div class="stat-item__value" id="statStarred">0</div>
+            <div class="stat-item__label">Starred</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__icon stat-item__icon--target">🎯</div>
+            <div class="stat-item__value" id="statPercent">0%</div>
+            <div class="stat-item__label">Completion</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__icon stat-item__icon--bolt">⚡</div>
+            <div class="stat-item__value" id="statToday">0</div>
+            <div class="stat-item__label">Solved Today</div>
+          </div>
+        </div>
+        <!-- Heatmap -->
+        <div class="heatmap-section">
+          <h3 class="heatmap-title">Activity (Last 30 Days)</h3>
+          <div class="heatmap" id="heatmap"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Difficulty Tabs ─── -->
+    <section class="diff-tabs-section" id="diffSection">
+      <div class="diff-tabs" id="diffTabs">
+        <button class="diff-tab diff-tab--all diff-tab--active" data-level="all">
+          <span class="diff-tab__label">All</span>
+          <span class="diff-tab__badge" id="badgeAll">0</span>
+        </button>
+        <button class="diff-tab diff-tab--easy" data-level="Easy">
+          <span class="diff-tab__label">Easy</span>
+          <span class="diff-tab__badge" id="badgeEasy">0</span>
+        </button>
+        <button class="diff-tab diff-tab--medium" data-level="Medium">
+          <span class="diff-tab__label">Medium</span>
+          <span class="diff-tab__badge" id="badgeMedium">0</span>
+        </button>
+        <button class="diff-tab diff-tab--hard" data-level="Hard">
+          <span class="diff-tab__label">Hard</span>
+          <span class="diff-tab__badge" id="badgeHard">0</span>
+        </button>
+      </div>
+      <div class="diff-progress-row" id="diffProgressRow">
+        <!-- JS injects progress bars per difficulty -->
+      </div>
+    </section>
+
+    <!-- ─── Questions List ─── -->
+    <section class="questions-section" id="questionsSection">
+      <div id="questionsContainer">
+        <!-- Dynamically built category accordions -->
+      </div>
+      <div class="empty-state" id="emptyState" style="display:none">
+        <svg viewBox="0 0 80 80" fill="none" width="80" height="80"><rect x="10" y="14" width="60" height="52" rx="8" stroke="#4b5563" stroke-width="2"/><path d="M26 36h28M26 44h20" stroke="#4b5563" stroke-width="2" stroke-linecap="round"/><circle cx="58" cy="56" r="14" fill="#1e232b" stroke="#6366f1" stroke-width="2"/><path d="M55 56l2 2 4-4" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p class="empty-state__title">No questions found</p>
+        <p class="empty-state__sub">Try adjusting your search or filters.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ═══════ ADD / EDIT QUESTION MODAL ═══════ -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="questionModal">
+      <div class="modal__header">
+        <h2 class="modal__title" id="modalTitle">Add New Question</h2>
+        <button class="modal__close" id="modalClose">&times;</button>
+      </div>
+      <form class="modal__form" id="questionForm">
+        <input type="hidden" id="editId" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="formLevel">Difficulty</label>
+            <select id="formLevel" required>
+              <option value="Easy">Easy</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="Hard">Hard</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="formCategory">Category</label>
+            <input type="text" id="formCategory" list="categoryList" placeholder="e.g. Array" required />
+            <datalist id="categoryList"></datalist>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="formTitle">Question Title</label>
+          <input type="text" id="formTitle" placeholder="e.g. Two Sum" required />
+        </div>
+        <div class="form-group">
+          <label for="formLink">Problem Link</label>
+          <input type="url" id="formLink" placeholder="https://leetcode.com/problems/..." required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="formPlatform">Platform</label>
+            <select id="formPlatform">
+              <option value="LeetCode">LeetCode</option>
+              <option value="GFG">GeeksForGeeks</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="formFrequency">Interview Frequency</label>
+            <select id="formFrequency">
+              <option value="5">🔥 Very High (5)</option>
+              <option value="4">High (4)</option>
+              <option value="3" selected>Medium (3)</option>
+              <option value="2">Low (2)</option>
+              <option value="1">Rare (1)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="formTopics">Topics / Tags <span class="form-hint">(comma separated)</span></label>
+          <input type="text" id="formTopics" placeholder="e.g. DP, Hash Map, Two Pointers" />
+        </div>
+        <div class="modal__actions">
+          <button type="button" class="btn btn--ghost" id="modalCancel">Cancel</button>
+          <button type="submit" class="btn btn--primary" id="modalSubmit">Add Question</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════ NOTES DRAWER ═══════ -->
+  <div class="drawer-overlay" id="drawerOverlay">
+    <div class="drawer" id="notesDrawer">
+      <div class="drawer__header">
+        <h3 class="drawer__title" id="drawerTitle">Notes</h3>
+        <button class="drawer__close" id="drawerClose">&times;</button>
+      </div>
+      <textarea class="drawer__textarea" id="drawerNotes" placeholder="Write your approach, key insights, or reminders here..."></textarea>
+      <div class="drawer__actions">
+        <button class="btn btn--primary" id="drawerSave">Save Notes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ TOAST ═══════ -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="data/questions.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
