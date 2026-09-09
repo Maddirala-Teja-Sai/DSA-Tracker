@@ -265,7 +265,7 @@
       const totalCount = questions.length;
       const pct = totalCount ? (solvedCount / totalCount * 100) : 0;
       html += `
-        <div class="category-accordion open" data-cat="${category}">
+        <div class="category-accordion" data-cat="${category}">
           <div class="category-accordion__header" onclick="window.__toggleAccordion(this)">
             <svg class="category-accordion__chevron" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span class="category-accordion__name">${category}</span>
