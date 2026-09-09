@@ -11,6 +11,7 @@
     notes: "dsa_notes",
     custom: "dsa_custom",
     activity: "dsa_activity",
+    solvedDates: "dsa_solved_dates",
   };
 
   let allQuestions = [...DEFAULT_QUESTIONS];
@@ -18,6 +19,7 @@
   let starredSet = new Set();
   let notesMap = {};
   let activityMap = {};  // { "YYYY-MM-DD": count }
+  let solvedDatesMap = {}; // { [questionId]: "YYYY-MM-DD" }
 
   let currentLevel = "all";
   let currentStatus = "all";
@@ -50,7 +52,40 @@
     try { starredSet = new Set(JSON.parse(localStorage.getItem(STORAGE_KEYS.starred) || "[]")); } catch { starredSet = new Set(); }
     try { notesMap = JSON.parse(localStorage.getItem(STORAGE_KEYS.notes) || "{}"); } catch { notesMap = {}; }
     try { activityMap = JSON.parse(localStorage.getItem(STORAGE_KEYS.activity) || "{}"); } catch { activityMap = {}; }
+    try { solvedDatesMap = JSON.parse(localStorage.getItem(STORAGE_KEYS.solvedDates) || "{}"); } catch { solvedDatesMap = {}; }
+
+    // Reconcile solvedSet and solvedDatesMap
+    const today = todayStr();
+    solvedSet.forEach(id => {
+      if (!solvedDatesMap[id]) {
+        solvedDatesMap[id] = today;
+      }
+    });
+    Object.keys(solvedDatesMap).forEach(id => {
+      if (!solvedSet.has(id)) {
+        delete solvedDatesMap[id];
+      }
+    });
+
+    rebuildActivityMap();
   }
+
+  function rebuildActivityMap() {
+    const counts = {};
+    for (const [id, date] of Object.entries(solvedDatesMap)) {
+      if (solvedSet.has(id) && date) {
+        counts[date] = (counts[date] || 0) + 1;
+      }
+    }
+    // Retain historical days from activityMap if before today
+    for (const [date, count] of Object.entries(activityMap)) {
+      if (date < todayStr() && !counts[date] && count > 0) {
+        counts[date] = count;
+      }
+    }
+    activityMap = counts;
+  }
+
   function saveState() {
     const customQ = allQuestions.filter(q => q.isCustom);
     localStorage.setItem(STORAGE_KEYS.custom, JSON.stringify(customQ));
@@ -58,6 +93,7 @@
     localStorage.setItem(STORAGE_KEYS.starred, JSON.stringify([...starredSet]));
     localStorage.setItem(STORAGE_KEYS.notes, JSON.stringify(notesMap));
     localStorage.setItem(STORAGE_KEYS.activity, JSON.stringify(activityMap));
+    localStorage.setItem(STORAGE_KEYS.solvedDates, JSON.stringify(solvedDatesMap));
   }
 
   // ─── Helpers ───
@@ -336,12 +372,12 @@
   window.__toggleSolved = function (id, checked) {
     if (checked) {
       solvedSet.add(id);
-      // Track activity
-      const today = todayStr();
-      activityMap[today] = (activityMap[today] || 0) + 1;
+      solvedDatesMap[id] = todayStr();
     } else {
       solvedSet.delete(id);
+      delete solvedDatesMap[id];
     }
+    rebuildActivityMap();
     saveState();
     refreshAll();
 
@@ -388,6 +424,8 @@
     solvedSet.delete(id);
     starredSet.delete(id);
     delete notesMap[id];
+    delete solvedDatesMap[id];
+    rebuildActivityMap();
     saveState();
     refreshAll();
     showToast("Question deleted", "success");
@@ -579,6 +617,7 @@
         notes: notesMap,
         custom: allQuestions.filter(q => q.isCustom),
         activity: activityMap,
+        solvedDates: solvedDatesMap,
         exportedAt: new Date().toISOString(),
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -604,10 +643,12 @@
           if (data.starred) starredSet = new Set(data.starred);
           if (data.notes) notesMap = data.notes;
           if (data.activity) activityMap = data.activity;
+          if (data.solvedDates) solvedDatesMap = data.solvedDates;
           if (data.custom) {
             const customQ = data.custom.map(q => ({ ...q, isCustom: true }));
             allQuestions = [...DEFAULT_QUESTIONS, ...customQ];
           }
+          rebuildActivityMap();
           saveState();
           refreshAll();
           populateCategoryDatalist();
@@ -628,10 +669,12 @@
       localStorage.removeItem(STORAGE_KEYS.notes);
       localStorage.removeItem(STORAGE_KEYS.custom);
       localStorage.removeItem(STORAGE_KEYS.activity);
+      localStorage.removeItem(STORAGE_KEYS.solvedDates);
       solvedSet = new Set();
       starredSet = new Set();
       notesMap = {};
       activityMap = {};
+      solvedDatesMap = {};
       allQuestions = [...DEFAULT_QUESTIONS];
       saveState();
       refreshAll();
