@@ -251,6 +251,12 @@
     const container = document.getElementById("questionsContainer");
     const emptyState = document.getElementById("emptyState");
 
+    // Preserve which accordions are currently open
+    const openCategories = new Set();
+    container.querySelectorAll(".category-accordion.open").forEach(el => {
+      openCategories.add(el.dataset.cat);
+    });
+
     if (filtered.length === 0) {
       container.innerHTML = "";
       emptyState.style.display = "flex";
@@ -264,8 +270,9 @@
       const solvedCount = questions.filter(q => solvedSet.has(q.id)).length;
       const totalCount = questions.length;
       const pct = totalCount ? (solvedCount / totalCount * 100) : 0;
+      const isOpen = openCategories.has(category);
       html += `
-        <div class="category-accordion" data-cat="${category}">
+        <div class="category-accordion${isOpen ? ' open' : ''}" data-cat="${category}">
           <div class="category-accordion__header" onclick="window.__toggleAccordion(this)">
             <svg class="category-accordion__chevron" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span class="category-accordion__name">${category}</span>
