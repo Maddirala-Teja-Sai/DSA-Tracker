@@ -20,6 +20,8 @@
   let notesMap = {};
   let activityMap = {};  // { "YYYY-MM-DD": count }
   let solvedDatesMap = {}; // { [questionId]: "YYYY-MM-DD" }
+  let completedCategories = new Set();
+  let completedPatterns = new Set();
 
   let currentLevel = "all";
   let currentStatus = "all";
@@ -139,6 +141,30 @@
     });
 
     rebuildActivityMap();
+    syncCompletedSets();
+  }
+
+  function syncCompletedSets() {
+    completedCategories.clear();
+    const catCounts = new Map();
+    allQuestions.forEach(q => {
+      if (!catCounts.has(q.category)) catCounts.set(q.category, { total: 0, solved: 0 });
+      catCounts.get(q.category).total++;
+      if (solvedSet.has(q.id)) catCounts.get(q.category).solved++;
+    });
+    for (const [name, { total, solved }] of catCounts) {
+      if (total > 0 && solved === total) {
+        completedCategories.add(name);
+      }
+    }
+
+    completedPatterns.clear();
+    ALGORITHM_PATTERNS.forEach(pat => {
+      const matched = allQuestions.filter(pat.match);
+      if (matched.length > 0 && matched.every(q => solvedSet.has(q.id))) {
+        completedPatterns.add(pat.name);
+      }
+    });
   }
 
   function rebuildActivityMap() {
@@ -361,6 +387,7 @@
           allQuestions = [...DEFAULT_QUESTIONS, ...customQ];
         }
         rebuildActivityMap();
+        syncCompletedSets();
         refreshAll();
         populateCategoryDatalist();
         setSyncBadge("synced");
@@ -799,19 +826,26 @@
   };
 
   window.__toggleSolved = function (id, checked) {
+    const q = allQuestions.find(x => x.id === id);
     if (checked) {
       solvedSet.add(id);
       solvedDatesMap[id] = todayStr();
     } else {
       solvedSet.delete(id);
       delete solvedDatesMap[id];
+      if (q) {
+        if (q.category) completedCategories.delete(q.category);
+        ALGORITHM_PATTERNS.forEach(pat => {
+          if (pat.match(q)) completedPatterns.delete(pat.name);
+        });
+      }
     }
     rebuildActivityMap();
     saveState();
     refreshAll();
 
     // Check for milestones
-    if (checked) checkMilestones();
+    if (checked) checkMilestones(id);
   };
 
   window.__toggleStar = function (id) {
@@ -855,6 +889,7 @@
     delete notesMap[id];
     delete solvedDatesMap[id];
     rebuildActivityMap();
+    syncCompletedSets();
     saveState();
     refreshAll();
     showToast("Question deleted", "success");
@@ -873,28 +908,39 @@
   }
 
   // ─── Milestones ───
-  function checkMilestones() {
+  function checkMilestones(justSolvedId) {
     const totalSolved = solvedSet.size;
     const milestones = [10, 25, 50, 75, 100, 150, 200];
     if (milestones.includes(totalSolved)) {
       showToast(`🎉 Milestone! ${totalSolved} problems solved!`, "success");
       fireConfetti();
     }
-    // Check category completion
-    const cats = new Map();
-    allQuestions.forEach(q => {
-      if (!cats.has(q.category)) cats.set(q.category, { total: 0, solved: 0 });
-      cats.get(q.category).total++;
-      if (solvedSet.has(q.id)) cats.get(q.category).solved++;
-    });
-    for (const [name, { total, solved }] of cats) {
-      if (total > 0 && solved === total) {
-        // Check if we just completed it (last question)
-        showToast(`🏆 Category "${name}" complete!`, "success");
+
+    if (!justSolvedId) return;
+    const justSolvedQ = allQuestions.find(q => q.id === justSolvedId);
+    if (!justSolvedQ) return;
+
+    // Check category completion ONLY for the category of the question just solved
+    if (justSolvedQ.category && !completedCategories.has(justSolvedQ.category)) {
+      const catQuestions = allQuestions.filter(q => q.category === justSolvedQ.category);
+      if (catQuestions.length > 0 && catQuestions.every(q => solvedSet.has(q.id))) {
+        completedCategories.add(justSolvedQ.category);
+        showToast(`🏆 Category "${justSolvedQ.category}" complete!`, "success");
         fireConfetti();
-        break;
       }
     }
+
+    // Check pattern completion ONLY for patterns matching the question just solved
+    ALGORITHM_PATTERNS.forEach(pat => {
+      if (pat.match(justSolvedQ) && !completedPatterns.has(pat.name)) {
+        const patQuestions = allQuestions.filter(pat.match);
+        if (patQuestions.length > 0 && patQuestions.every(q => solvedSet.has(q.id))) {
+          completedPatterns.add(pat.name);
+          showToast(`⚡ Algorithm Pattern "${pat.name}" complete!`, "success");
+          fireConfetti();
+        }
+      }
+    });
   }
 
   // ─── Confetti ───
@@ -1109,6 +1155,7 @@
             allQuestions = [...DEFAULT_QUESTIONS, ...customQ];
           }
           rebuildActivityMap();
+          syncCompletedSets();
           saveState();
           refreshAll();
           populateCategoryDatalist();
@@ -1135,6 +1182,8 @@
       notesMap = {};
       activityMap = {};
       solvedDatesMap = {};
+      completedCategories.clear();
+      completedPatterns.clear();
       allQuestions = [...DEFAULT_QUESTIONS];
       saveState();
       refreshAll();
@@ -1188,6 +1237,7 @@
         showToast("Question added!", "success");
       }
 
+      syncCompletedSets();
       saveState();
       refreshAll();
       populateCategoryDatalist();
