@@ -31,7 +31,6 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/config/auth", (_req, res) => {
   const { getIsConnected } = require("./config/db");
   res.json({
-    googleClientId: process.env.GOOGLE_CLIENT_ID || "",
     hasDb: getIsConnected(),
   });
 });

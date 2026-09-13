@@ -33,7 +33,6 @@
 
   let currentUser = null;
   let syncTimer = null;
-  let googleClientId = "";
   let hasDbConnection = false;
   let authMode = "login"; // "login" | "signup"
 
@@ -252,7 +251,6 @@
       const configRes = await fetch("/api/config/auth");
       if (configRes.ok) {
         const config = await configRes.json();
-        googleClientId = config.googleClientId;
         hasDbConnection = config.hasDb;
       }
     } catch (err) {
@@ -272,58 +270,6 @@
       }
     } catch (err) {
       console.warn("Session check failed:", err);
-    }
-
-    setupGoogleAuth();
-  }
-
-  function setupGoogleAuth() {
-    const googleContainer = document.getElementById("googleBtnContainer");
-    const fallbackContainer = document.getElementById("googleFallbackContainer");
-    if (!googleContainer || !fallbackContainer) return;
-
-    if (window.google && window.google.accounts && window.google.accounts.id && googleClientId) {
-      try {
-        google.accounts.id.initialize({
-          client_id: googleClientId,
-          callback: handleGoogleCredential,
-          auto_select: false,
-        });
-        google.accounts.id.renderButton(googleContainer, {
-          theme: "outline",
-          size: "large",
-          width: 340,
-          text: "continue_with",
-          shape: "pill",
-        });
-        googleContainer.style.display = "flex";
-        fallbackContainer.style.display = "none";
-        return;
-      } catch (err) {
-        console.warn("Google Identity initialization error:", err);
-      }
-    }
-
-    // Fallback if client ID is not configured yet or script unavailable
-    googleContainer.style.display = "none";
-    fallbackContainer.style.display = "block";
-  }
-
-  async function handleGoogleCredential(response) {
-    try {
-      showAuthError("");
-      setSyncBadge("syncing");
-      const res = await fetch("/api/auth/google", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential: response.credential }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Google sign-in failed");
-      await handleAuthSuccess(data);
-    } catch (err) {
-      showAuthError(err.message);
-      setSyncBadge("local");
     }
   }
 
@@ -1270,7 +1216,6 @@
     if (openAuthBtn) {
       openAuthBtn.addEventListener("click", () => {
         showAuthError("");
-        setupGoogleAuth();
         authModalOverlay.classList.add("open");
       });
     }

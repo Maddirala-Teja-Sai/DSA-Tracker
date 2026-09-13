@@ -1,97 +1,16 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/User");
 const { generateToken, setAuthCookie, clearAuthCookie, requireAuth } = require("../middleware/auth");
 const { getIsConnected } = require("../config/db");
 
 const router = express.Router();
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // ─── Public Auth Config for Frontend ───
 router.get("/config", (req, res) => {
   res.json({
-    googleClientId: process.env.GOOGLE_CLIENT_ID || "",
     hasDb: getIsConnected(),
   });
-});
-
-// ─── Google Sign-In / Sign-Up ───
-router.post("/google", async (req, res) => {
-  try {
-    if (!getIsConnected()) {
-      return res.status(503).json({ error: "Database not connected. Please check MONGODB_URI." });
-    }
-
-    const { credential } = req.body;
-    if (!credential) {
-      return res.status(400).json({ error: "Google credential token is required" });
-    }
-
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    let payload;
-
-    if (clientId) {
-      // Production verification against Google Client ID
-      const ticket = await googleClient.verifyIdToken({
-        idToken: credential,
-        audience: clientId,
-      });
-      payload = ticket.getPayload();
-    } else {
-      // In development if client ID is not configured yet, decode JWT payload
-      console.warn("⚠️  GOOGLE_CLIENT_ID not set; decoding token payload for development.");
-      const jwt = require("jsonwebtoken");
-      payload = jwt.decode(credential);
-    }
-
-    if (!payload || !payload.email) {
-      return res.status(400).json({ error: "Invalid Google token payload" });
-    }
-
-    const { sub: googleId, email, name, picture: avatar } = payload;
-
-    // Find user by googleId or email
-    let user = await User.findOne({ $or: [{ googleId }, { email: email.toLowerCase() }] });
-
-    if (!user) {
-      // New user creation
-      user = new User({
-        email: email.toLowerCase(),
-        name: name || email.split("@")[0],
-        avatar: avatar || "",
-        googleId,
-        authProvider: "google",
-        lastLoginAt: new Date(),
-      });
-      await user.save();
-    } else {
-      // Existing user update
-      user.lastLoginAt = new Date();
-      if (!user.googleId) user.googleId = googleId;
-      if (avatar && !user.avatar) user.avatar = avatar;
-      if (name && !user.name) user.name = name;
-      await user.save();
-    }
-
-    // 1-month session cookie
-    const token = generateToken(user._id);
-    setAuthCookie(res, token);
-
-    const hasData = Boolean(
-      (user.trackerData.solved && user.trackerData.solved.length > 0) ||
-      (user.trackerData.starred && user.trackerData.starred.length > 0) ||
-      (user.trackerData.customQuestions && user.trackerData.customQuestions.length > 0)
-    );
-
-    res.json({
-      user: user.toSafeObject(),
-      hasCloudData: hasData,
-    });
-  } catch (err) {
-    console.error("Google Auth Error:", err);
-    res.status(401).json({ error: "Google authentication failed: " + err.message });
-  }
 });
 
 // ─── Email & Password Sign-Up ───
