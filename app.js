@@ -29,6 +29,12 @@
   let currentView = localStorage.getItem("dsa_view_mode") || "category"; // "category" | "pattern"
   let currentBreakdown = "category"; // "category" | "pattern"
 
+  let currentUser = null;
+  let syncTimer = null;
+  let googleClientId = "";
+  let hasDbConnection = false;
+  let authMode = "login"; // "login" | "signup"
+
   // ─── 9 Core Algorithm & Pattern Lists ───
   const ALGORITHM_PATTERNS = [
     {
@@ -91,7 +97,7 @@
   ];
 
   // ─── Init ───
-  function init() {
+  async function init() {
     loadState();
     renderDiffTabs();
     renderDiffProgress();
@@ -104,6 +110,7 @@
     renderQuestions();
     populateCategoryDatalist();
     bindEvents();
+    await initAuth();
   }
 
   // ─── Persistence ───
@@ -158,6 +165,264 @@
     localStorage.setItem(STORAGE_KEYS.notes, JSON.stringify(notesMap));
     localStorage.setItem(STORAGE_KEYS.activity, JSON.stringify(activityMap));
     localStorage.setItem(STORAGE_KEYS.solvedDates, JSON.stringify(solvedDatesMap));
+
+    if (currentUser) {
+      scheduleCloudSync();
+    }
+  }
+
+  function scheduleCloudSync() {
+    setSyncBadge("syncing");
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(syncToCloud, 800);
+  }
+
+  async function syncToCloud() {
+    if (!currentUser) return;
+    try {
+      const payload = {
+        solved: [...solvedSet],
+        starred: [...starredSet],
+        notes: notesMap,
+        solvedDates: solvedDatesMap,
+        activity: activityMap,
+        customQuestions: allQuestions.filter(q => q.isCustom),
+      };
+      const res = await fetch("/api/user/data", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setSyncBadge("synced");
+      } else {
+        setSyncBadge("local");
+      }
+    } catch (err) {
+      console.warn("Cloud sync error:", err);
+      setSyncBadge("local");
+    }
+  }
+
+  function setSyncBadge(status) {
+    const badge = document.getElementById("syncBadge");
+    const text = document.getElementById("syncText");
+    if (!badge || !text) return;
+    badge.className = "sync-badge";
+    if (status === "synced") {
+      badge.classList.add("sync-badge--synced");
+      text.textContent = "Synced";
+    } else if (status === "syncing") {
+      badge.classList.add("sync-badge--syncing");
+      text.textContent = "Syncing...";
+    } else {
+      text.textContent = currentUser ? "Cloud" : "Local";
+    }
+  }
+
+  // ─── Authentication & Cloud Persistence ───
+  async function initAuth() {
+    try {
+      const configRes = await fetch("/api/config/auth");
+      if (configRes.ok) {
+        const config = await configRes.json();
+        googleClientId = config.googleClientId;
+        hasDbConnection = config.hasDb;
+      }
+    } catch (err) {
+      console.warn("Auth config fetch failed:", err);
+    }
+
+    // Check existing 30-day session
+    try {
+      const meRes = await fetch("/api/auth/me");
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        if (meData.user) {
+          currentUser = meData.user;
+          updateUserUI();
+          await loadCloudData();
+        }
+      }
+    } catch (err) {
+      console.warn("Session check failed:", err);
+    }
+
+    setupGoogleAuth();
+  }
+
+  function setupGoogleAuth() {
+    const googleContainer = document.getElementById("googleBtnContainer");
+    const fallbackContainer = document.getElementById("googleFallbackContainer");
+    if (!googleContainer || !fallbackContainer) return;
+
+    if (window.google && window.google.accounts && window.google.accounts.id && googleClientId) {
+      try {
+        google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: handleGoogleCredential,
+          auto_select: false,
+        });
+        google.accounts.id.renderButton(googleContainer, {
+          theme: "outline",
+          size: "large",
+          width: 340,
+          text: "continue_with",
+          shape: "pill",
+        });
+        googleContainer.style.display = "flex";
+        fallbackContainer.style.display = "none";
+        return;
+      } catch (err) {
+        console.warn("Google Identity initialization error:", err);
+      }
+    }
+
+    // Fallback if client ID is not configured yet or script unavailable
+    googleContainer.style.display = "none";
+    fallbackContainer.style.display = "block";
+  }
+
+  async function handleGoogleCredential(response) {
+    try {
+      showAuthError("");
+      setSyncBadge("syncing");
+      const res = await fetch("/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: response.credential }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Google sign-in failed");
+      await handleAuthSuccess(data);
+    } catch (err) {
+      showAuthError(err.message);
+      setSyncBadge("local");
+    }
+  }
+
+  async function handleAuthSuccess(data) {
+    currentUser = data.user;
+    updateUserUI();
+    document.getElementById("authModalOverlay").classList.remove("open");
+    showToast(`Welcome back, ${currentUser.name}! (30-day session active)`, "success");
+
+    const hasLocalProgress = solvedSet.size > 0;
+    if (hasLocalProgress && !data.hasCloudData) {
+      // Auto-migrate local data to new cloud account
+      await migrateLocalToCloud();
+    } else if (hasLocalProgress && data.hasCloudData) {
+      // Prompt migration
+      showMigrationAlert();
+    } else {
+      await loadCloudData();
+    }
+  }
+
+  function updateUserUI() {
+    const openAuthBtn = document.getElementById("openAuthBtn");
+    const userProfile = document.getElementById("userProfile");
+    const userName = document.getElementById("userName");
+    const userDropdownName = document.getElementById("userDropdownName");
+    const userEmail = document.getElementById("userEmail");
+    const userAvatar = document.getElementById("userAvatar");
+
+    if (currentUser) {
+      if (openAuthBtn) openAuthBtn.style.display = "none";
+      if (userProfile) userProfile.style.display = "block";
+      if (userName) userName.textContent = currentUser.name;
+      if (userDropdownName) userDropdownName.textContent = currentUser.name;
+      if (userEmail) userEmail.textContent = currentUser.email;
+      if (userAvatar) {
+        userAvatar.src = currentUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=6366f1&color=fff`;
+      }
+      setSyncBadge("synced");
+    } else {
+      if (openAuthBtn) openAuthBtn.style.display = "flex";
+      if (userProfile) userProfile.style.display = "none";
+      setSyncBadge("local");
+    }
+  }
+
+  async function loadCloudData() {
+    try {
+      setSyncBadge("syncing");
+      const res = await fetch("/api/user/data");
+      if (!res.ok) return;
+      const { data } = await res.json();
+      if (data) {
+        if (data.solved) solvedSet = new Set(data.solved);
+        if (data.starred) starredSet = new Set(data.starred);
+        if (data.notes) notesMap = data.notes;
+        if (data.solvedDates) solvedDatesMap = data.solvedDates;
+        if (data.activity) activityMap = data.activity;
+        if (data.customQuestions && data.customQuestions.length > 0) {
+          const customQ = data.customQuestions.map(q => ({ ...q, isCustom: true }));
+          allQuestions = [...DEFAULT_QUESTIONS, ...customQ];
+        }
+        rebuildActivityMap();
+        refreshAll();
+        populateCategoryDatalist();
+        setSyncBadge("synced");
+      }
+    } catch (err) {
+      console.warn("Failed to load cloud data:", err);
+      setSyncBadge("local");
+    }
+  }
+
+  async function migrateLocalToCloud() {
+    try {
+      setSyncBadge("syncing");
+      const payload = {
+        solved: [...solvedSet],
+        starred: [...starredSet],
+        notes: notesMap,
+        solvedDates: solvedDatesMap,
+        activity: activityMap,
+        custom: allQuestions.filter(q => q.isCustom),
+      };
+      const res = await fetch("/api/user/sync-local", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const { data } = await res.json();
+        if (data) {
+          if (data.solved) solvedSet = new Set(data.solved);
+          if (data.starred) starredSet = new Set(data.starred);
+          if (data.notes) notesMap = data.notes;
+          if (data.solvedDates) solvedDatesMap = data.solvedDates;
+          if (data.activity) activityMap = data.activity;
+          rebuildActivityMap();
+          refreshAll();
+        }
+        showToast("Local progress saved to cloud!", "success");
+        setSyncBadge("synced");
+      }
+    } catch (err) {
+      console.warn("Migration failed:", err);
+    }
+  }
+
+  function showMigrationAlert() {
+    const alert = document.getElementById("migrationAlert");
+    const count = solvedSet.size;
+    const text = document.getElementById("migrationText");
+    if (text) text.textContent = `You have ${count} solved question(s) in this browser. Merge them into your cloud account?`;
+    if (alert) alert.style.display = "flex";
+  }
+
+  function showAuthError(msg) {
+    const errBox = document.getElementById("authError");
+    if (!errBox) return;
+    if (msg) {
+      errBox.textContent = msg;
+      errBox.style.display = "block";
+    } else {
+      errBox.style.display = "none";
+    }
   }
 
   // ─── Helpers ───
@@ -949,12 +1214,151 @@
       document.getElementById("drawerOverlay").classList.remove("open");
     });
 
+    // Auth Modal open/close
+    const authModalOverlay = document.getElementById("authModalOverlay");
+    const openAuthBtn = document.getElementById("openAuthBtn");
+    if (openAuthBtn) {
+      openAuthBtn.addEventListener("click", () => {
+        showAuthError("");
+        setupGoogleAuth();
+        authModalOverlay.classList.add("open");
+      });
+    }
+    document.getElementById("authModalClose").addEventListener("click", () => authModalOverlay.classList.remove("open"));
+    authModalOverlay.addEventListener("click", e => {
+      if (e.target === authModalOverlay) authModalOverlay.classList.remove("open");
+    });
+
+    // Auth tabs (Login vs Signup)
+    const tabLogin = document.getElementById("tabLogin");
+    const tabSignup = document.getElementById("tabSignup");
+    const nameGroup = document.getElementById("nameGroup");
+    const authSubmitBtn = document.getElementById("authSubmitBtn");
+    const authModalTitle = document.getElementById("authModalTitle");
+
+    tabLogin.addEventListener("click", () => {
+      authMode = "login";
+      tabLogin.classList.add("auth-tab--active");
+      tabSignup.classList.remove("auth-tab--active");
+      nameGroup.style.display = "none";
+      authSubmitBtn.textContent = "Sign In";
+      authModalTitle.textContent = "Sign in to DSA Tracker";
+      showAuthError("");
+    });
+    tabSignup.addEventListener("click", () => {
+      authMode = "signup";
+      tabSignup.classList.add("auth-tab--active");
+      tabLogin.classList.remove("auth-tab--active");
+      nameGroup.style.display = "block";
+      authSubmitBtn.textContent = "Create Account";
+      authModalTitle.textContent = "Create your DSA Account";
+      showAuthError("");
+    });
+
+    // Email/Password Form Submit
+    document.getElementById("authForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const email = document.getElementById("authEmail").value.trim();
+      const password = document.getElementById("authPassword").value;
+      const name = document.getElementById("authName").value.trim();
+
+      try {
+        authSubmitBtn.disabled = true;
+        authSubmitBtn.textContent = "Processing...";
+        showAuthError("");
+
+        const endpoint = authMode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+        const body = authMode === "signup" ? { email, password, name } : { email, password };
+
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Authentication failed");
+
+        await handleAuthSuccess(data);
+      } catch (err) {
+        showAuthError(err.message);
+      } finally {
+        authSubmitBtn.disabled = false;
+        authSubmitBtn.textContent = authMode === "signup" ? "Create Account" : "Sign In";
+      }
+    });
+
+    // Google custom button fallback
+    const googleCustomBtn = document.getElementById("googleCustomBtn");
+    if (googleCustomBtn) {
+      googleCustomBtn.addEventListener("click", () => {
+        if (!googleClientId) {
+          showAuthError("Google Client ID is not configured yet in .env / Render environment variables. You can sign in using Email & Password below, or configure GOOGLE_CLIENT_ID.");
+        } else {
+          showAuthError("Loading Google Sign-In...");
+          setupGoogleAuth();
+        }
+      });
+    }
+
+    // User Profile Dropdown
+    const userMenuBtn = document.getElementById("userMenuBtn");
+    const userDropdown = document.getElementById("userDropdown");
+    if (userMenuBtn && userDropdown) {
+      userMenuBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        userDropdown.classList.toggle("open");
+      });
+      document.addEventListener("click", () => userDropdown.classList.remove("open"));
+    }
+
+    // Manual Sync Button
+    const manualSyncBtn = document.getElementById("manualSyncBtn");
+    if (manualSyncBtn) {
+      manualSyncBtn.addEventListener("click", async () => {
+        if (!currentUser) return;
+        setSyncBadge("syncing");
+        await syncToCloud();
+        showToast("Cloud sync complete!", "success");
+      });
+    }
+
+    // Logout
+    const logoutBtn = document.getElementById("logoutBtn");
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", async () => {
+        try {
+          await fetch("/api/auth/logout", { method: "POST" });
+        } catch {}
+        currentUser = null;
+        updateUserUI();
+        showToast("Signed out. Using local browser storage.", "info");
+      });
+    }
+
+    // Migration Alert buttons
+    const mergeProgressBtn = document.getElementById("mergeProgressBtn");
+    const skipMergeBtn = document.getElementById("skipMergeBtn");
+    if (mergeProgressBtn) {
+      mergeProgressBtn.addEventListener("click", async () => {
+        await migrateLocalToCloud();
+        document.getElementById("migrationAlert").style.display = "none";
+      });
+    }
+    if (skipMergeBtn) {
+      skipMergeBtn.addEventListener("click", async () => {
+        document.getElementById("migrationAlert").style.display = "none";
+        await loadCloudData();
+      });
+    }
+
     // Escape key
     document.addEventListener("keydown", e => {
       if (e.key === "Escape") {
         modalOverlay.classList.remove("open");
         document.getElementById("drawerOverlay").classList.remove("open");
         dataMenu.classList.remove("open");
+        authModalOverlay.classList.remove("open");
+        if (userDropdown) userDropdown.classList.remove("open");
       }
     });
   }
