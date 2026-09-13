@@ -26,6 +26,69 @@
   let currentPlatform = "all";
   let currentFreq = "all";
   let searchQuery = "";
+  let currentView = localStorage.getItem("dsa_view_mode") || "category"; // "category" | "pattern"
+  let currentBreakdown = "category"; // "category" | "pattern"
+
+  // ─── 9 Core Algorithm & Pattern Lists ───
+  const ALGORITHM_PATTERNS = [
+    {
+      name: "Hashing",
+      icon: "#️⃣",
+      match: (q) => (q.category && q.category.toLowerCase().includes("hash")) ||
+                    (q.topics || []).some(t => t.toLowerCase().includes("hash")),
+    },
+    {
+      name: "Sliding Window",
+      icon: "🪟",
+      match: (q) => (q.category && q.category.toLowerCase().includes("sliding window")) ||
+                    (q.topics || []).some(t => t.toLowerCase().includes("sliding window")),
+    },
+    {
+      name: "Binary Search",
+      icon: "🔍",
+      match: (q) => (q.category && q.category.toLowerCase().includes("binary search")) ||
+                    (q.topics || []).some(t => t.toLowerCase().includes("binary search")),
+    },
+    {
+      name: "Two Pointers",
+      icon: "👉👈",
+      match: (q) => (q.category && q.category.toLowerCase().includes("two pointer")) ||
+                    (q.topics || []).some(t => t.toLowerCase().includes("two pointer")),
+    },
+    {
+      name: "Recursion",
+      icon: "🔄",
+      match: (q) => (q.category && q.category.toLowerCase().includes("recursion")) ||
+                    (q.topics || []).some(t => t.toLowerCase().includes("recursion")),
+    },
+    {
+      name: "Backtracking",
+      icon: "🔙",
+      match: (q) => (q.category && q.category.toLowerCase().includes("backtracking")) ||
+                    (q.topics || []).some(t => t.toLowerCase().includes("backtracking")),
+    },
+    {
+      name: "Greedy",
+      icon: "💰",
+      match: (q) => (q.category && q.category.toLowerCase().includes("greedy")) ||
+                    (q.topics || []).some(t => t.toLowerCase().includes("greedy")),
+    },
+    {
+      name: "Dynamic Programming",
+      icon: "🧩",
+      match: (q) => (q.category && (q.category.toLowerCase().includes("dynamic programming") || q.category.toLowerCase().includes("dp"))) ||
+                    (q.topics || []).some(t => {
+                      const lt = t.toLowerCase();
+                      return lt.includes("dynamic programming") || lt.includes("memoization") || lt.includes("dp") || lt.includes("knapsack") || lt.includes("longest common subsequence") || lt.includes("longest increasing subsequence") || lt.includes("digit dp");
+                    }),
+    },
+    {
+      name: "Sorting Algorithms",
+      icon: "📊",
+      match: (q) => (q.category && q.category.toLowerCase().includes("sort")) ||
+                    (q.topics || []).some(t => t.toLowerCase().includes("sort")),
+    },
+  ];
 
   // ─── Init ───
   function init() {
@@ -37,6 +100,7 @@
     renderCategoryBars();
     renderStats();
     renderHeatmap();
+    updateViewSwitcherUI();
     renderQuestions();
     populateCategoryDatalist();
     bindEvents();
@@ -124,6 +188,27 @@
       if (!map.has(q.category)) map.set(q.category, []);
       map.get(q.category).push(q);
     });
+    return map;
+  }
+  function groupByPattern(list) {
+    const map = new Map();
+    const matchedIds = new Set();
+    ALGORITHM_PATTERNS.forEach(pat => {
+      const matchedQuestions = list.filter(pat.match);
+      matchedQuestions.forEach(q => matchedIds.add(q.id));
+      map.set(pat.name, {
+        icon: pat.icon,
+        questions: matchedQuestions,
+      });
+    });
+
+    const otherQuestions = list.filter(q => !matchedIds.has(q.id));
+    if (otherQuestions.length > 0 && searchQuery) {
+      map.set("Other Problems", {
+        icon: "📌",
+        questions: otherQuestions,
+      });
+    }
     return map;
   }
   function countByLevel(level) { return allQuestions.filter(q => q.level === level).length; }
@@ -214,27 +299,48 @@
     });
   }
 
-  // ─── Category Bars ───
+  // ─── Category & Pattern Breakdown Bars ───
   function renderCategoryBars() {
-    const cats = new Map();
-    allQuestions.forEach(q => {
-      if (!cats.has(q.category)) cats.set(q.category, { total: 0, solved: 0 });
-      cats.get(q.category).total++;
-      if (solvedSet.has(q.id)) cats.get(q.category).solved++;
-    });
-    const sorted = [...cats.entries()].sort((a, b) => b[1].total - a[1].total);
     const container = document.getElementById("categoryBars");
-    container.innerHTML = sorted.map(([name, { total, solved }]) => {
-      const pct = total ? (solved / total * 100) : 0;
-      return `
-        <div class="cat-bar">
-          <div class="cat-bar__header">
-            <span class="cat-bar__name">${name}</span>
-            <span class="cat-bar__count">${solved}/${total}</span>
-          </div>
-          <div class="cat-bar__track"><div class="cat-bar__fill" style="width:${pct}%"></div></div>
-        </div>`;
-    }).join("");
+    if (currentBreakdown === "pattern") {
+      const items = ALGORITHM_PATTERNS.map(pat => {
+        const questions = allQuestions.filter(pat.match);
+        const solved = questions.filter(q => solvedSet.has(q.id)).length;
+        const total = questions.length;
+        return { name: `${pat.icon} ${pat.name}`, total, solved };
+      }).filter(item => item.total > 0).sort((a, b) => b.total - a.total);
+
+      container.innerHTML = items.map(({ name, total, solved }) => {
+        const pct = total ? (solved / total * 100) : 0;
+        return `
+          <div class="cat-bar">
+            <div class="cat-bar__header">
+              <span class="cat-bar__name">${name}</span>
+              <span class="cat-bar__count">${solved}/${total}</span>
+            </div>
+            <div class="cat-bar__track"><div class="cat-bar__fill cat-bar__fill--pattern" style="width:${pct}%"></div></div>
+          </div>`;
+      }).join("");
+    } else {
+      const cats = new Map();
+      allQuestions.forEach(q => {
+        if (!cats.has(q.category)) cats.set(q.category, { total: 0, solved: 0 });
+        cats.get(q.category).total++;
+        if (solvedSet.has(q.id)) cats.get(q.category).solved++;
+      });
+      const sorted = [...cats.entries()].sort((a, b) => b[1].total - a[1].total);
+      container.innerHTML = sorted.map(([name, { total, solved }]) => {
+        const pct = total ? (solved / total * 100) : 0;
+        return `
+          <div class="cat-bar">
+            <div class="cat-bar__header">
+              <span class="cat-bar__name">${name}</span>
+              <span class="cat-bar__count">${solved}/${total}</span>
+            </div>
+            <div class="cat-bar__track"><div class="cat-bar__fill" style="width:${pct}%"></div></div>
+          </div>`;
+      }).join("");
+    }
   }
 
   // ─── Stats ───
@@ -281,6 +387,26 @@
     }
   }
 
+  // ─── View Switcher UI ───
+  function updateViewSwitcherUI() {
+    const catBtn = document.getElementById("viewCategoryBtn");
+    const patBtn = document.getElementById("viewPatternBtn");
+    const desc = document.getElementById("viewSwitcherDesc");
+    const catBadge = document.getElementById("viewCatCount");
+    const uniqueCats = new Set(allQuestions.map(q => q.category)).size;
+    if (catBadge) catBadge.textContent = `${uniqueCats} Categories`;
+
+    if (currentView === "pattern") {
+      catBtn.classList.remove("view-btn--active");
+      patBtn.classList.add("view-btn--active");
+      desc.innerHTML = `Showing <strong>9 Core Algorithm & Pattern Lists</strong> (Questions can belong to multiple lists)`;
+    } else {
+      patBtn.classList.remove("view-btn--active");
+      catBtn.classList.add("view-btn--active");
+      desc.innerHTML = `Showing questions grouped by <strong>Data Structure</strong> category`;
+    }
+  }
+
   // ─── Questions Rendering ───
   function renderQuestions() {
     const filtered = getFiltered();
@@ -300,30 +426,68 @@
     }
     emptyState.style.display = "none";
 
-    const groups = groupByCategory(filtered);
     let html = "";
-    for (const [category, questions] of groups) {
-      const solvedCount = questions.filter(q => solvedSet.has(q.id)).length;
-      const totalCount = questions.length;
-      const pct = totalCount ? (solvedCount / totalCount * 100) : 0;
-      const isOpen = openCategories.has(category);
-      html += `
-        <div class="category-accordion${isOpen ? ' open' : ''}" data-cat="${category}">
-          <div class="category-accordion__header" onclick="window.__toggleAccordion(this)">
-            <svg class="category-accordion__chevron" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span class="category-accordion__name">${category}</span>
-            <div class="category-accordion__progress">
-              <span class="category-accordion__count">${solvedCount}/${totalCount}</span>
-              <div class="category-accordion__bar"><div class="category-accordion__bar-fill" style="width:${pct}%"></div></div>
+
+    if (currentView === "pattern") {
+      const groups = groupByPattern(filtered);
+      for (const [patternName, { icon, questions }] of groups) {
+        if (questions.length === 0 && searchQuery) continue;
+        const solvedCount = questions.filter(q => solvedSet.has(q.id)).length;
+        const totalCount = questions.length;
+        const pct = totalCount ? (solvedCount / totalCount * 100) : 0;
+        const isOpen = openCategories.has(patternName);
+        html += `
+          <div class="category-accordion${isOpen ? ' open' : ''}" data-cat="${patternName}">
+            <div class="category-accordion__header" onclick="window.__toggleAccordion(this)">
+              <svg class="category-accordion__chevron" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="category-accordion__name">
+                <span>${icon} ${patternName}</span>
+                <span class="category-accordion__badge">Pattern</span>
+              </span>
+              <div class="category-accordion__progress">
+                <span class="category-accordion__count">${solvedCount}/${totalCount}</span>
+                <div class="category-accordion__bar"><div class="category-accordion__bar-fill cat-bar__fill--pattern" style="width:${pct}%"></div></div>
+              </div>
             </div>
-          </div>
-          <div class="category-accordion__body">
-            <div class="q-list">
-              ${questions.map(q => renderQuestionRow(q)).join("")}
+            <div class="category-accordion__body">
+              <div class="q-list">
+                ${questions.length > 0 ? questions.map(q => renderQuestionRow(q)).join("") : '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:.82rem">No questions match current filters.</div>'}
+              </div>
             </div>
-          </div>
-        </div>`;
+          </div>`;
+      }
+    } else {
+      const groups = groupByCategory(filtered);
+      for (const [category, questions] of groups) {
+        const solvedCount = questions.filter(q => solvedSet.has(q.id)).length;
+        const totalCount = questions.length;
+        const pct = totalCount ? (solvedCount / totalCount * 100) : 0;
+        const isOpen = openCategories.has(category);
+        html += `
+          <div class="category-accordion${isOpen ? ' open' : ''}" data-cat="${category}">
+            <div class="category-accordion__header" onclick="window.__toggleAccordion(this)">
+              <svg class="category-accordion__chevron" viewBox="0 0 20 20" fill="none"><path d="M7 4l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="category-accordion__name">${category}</span>
+              <div class="category-accordion__progress">
+                <span class="category-accordion__count">${solvedCount}/${totalCount}</span>
+                <div class="category-accordion__bar"><div class="category-accordion__bar-fill" style="width:${pct}%"></div></div>
+              </div>
+            </div>
+            <div class="category-accordion__body">
+              <div class="q-list">
+                ${questions.map(q => renderQuestionRow(q)).join("")}
+              </div>
+            </div>
+          </div>`;
+      }
     }
+
+    if (!html) {
+      container.innerHTML = "";
+      emptyState.style.display = "flex";
+      return;
+    }
+
     container.innerHTML = html;
   }
   function renderQuestionRow(q) {
@@ -539,6 +703,37 @@
 
   // ─── Bind Events ───
   function bindEvents() {
+    // View Mode Switcher
+    const viewSwitcher = document.getElementById("viewSwitcher");
+    if (viewSwitcher) {
+      viewSwitcher.addEventListener("click", e => {
+        const btn = e.target.closest(".view-btn");
+        if (!btn) return;
+        const view = btn.dataset.view;
+        if (view === currentView) return;
+        currentView = view;
+        try { localStorage.setItem("dsa_view_mode", currentView); } catch {}
+        updateViewSwitcherUI();
+        renderQuestions();
+      });
+    }
+
+    // Breakdown Toggle
+    const breakdownGroup = document.getElementById("breakdownToggleGroup");
+    if (breakdownGroup) {
+      breakdownGroup.addEventListener("click", e => {
+        const btn = e.target.closest(".card__toggle-btn");
+        if (!btn) return;
+        const bd = btn.dataset.breakdown;
+        if (bd === currentBreakdown) return;
+        currentBreakdown = bd;
+        document.querySelectorAll("#breakdownToggleGroup .card__toggle-btn").forEach(b => b.classList.remove("card__toggle-btn--active"));
+        btn.classList.add("card__toggle-btn--active");
+        document.getElementById("breakdownTitle").textContent = bd === "pattern" ? "Pattern Breakdown" : "Category Breakdown";
+        renderCategoryBars();
+      });
+    }
+
     // Difficulty tabs
     document.getElementById("diffTabs").addEventListener("click", e => {
       const tab = e.target.closest(".diff-tab");

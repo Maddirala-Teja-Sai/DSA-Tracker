@@ -140,7 +140,11 @@
       <!-- Category Breakdown -->
       <div class="card card--categories" id="categoryCard">
         <div class="card__header">
-          <h2 class="card__title">Category Breakdown</h2>
+          <h2 class="card__title" id="breakdownTitle">Category Breakdown</h2>
+          <div class="card__toggle-group" id="breakdownToggleGroup">
+            <button class="card__toggle-btn card__toggle-btn--active" id="breakdownCatBtn" data-breakdown="category">Categories</button>
+            <button class="card__toggle-btn" id="breakdownPatBtn" data-breakdown="pattern">Patterns</button>
+          </div>
         </div>
         <div class="category-bars" id="categoryBars">
           <!-- populated by JS -->
@@ -207,10 +211,37 @@
       </div>
     </section>
 
+    <!-- ─── View Mode Switcher (Categories vs Algorithm Pattern Lists) ─── -->
+    <section class="view-switcher-section" id="viewSwitcherSection">
+      <div class="view-switcher-bar">
+        <div class="view-switcher" id="viewSwitcher">
+          <button class="view-btn view-btn--active" id="viewCategoryBtn" data-view="category">
+            <span class="view-btn__icon">📂</span>
+            <span class="view-btn__text">
+              <span class="view-btn__title">Data Structures</span>
+              <span class="view-btn__sub">Grouped by Category</span>
+            </span>
+            <span class="view-btn__pill" id="viewCatCount">Categories</span>
+          </button>
+          <button class="view-btn" id="viewPatternBtn" data-view="pattern">
+            <span class="view-btn__icon">⚡</span>
+            <span class="view-btn__text">
+              <span class="view-btn__title">Algorithms & Patterns</span>
+              <span class="view-btn__sub">9 Core Patterns (Multi-list)</span>
+            </span>
+            <span class="view-btn__pill view-btn__pill--accent">9 Lists</span>
+          </button>
+        </div>
+        <div class="view-switcher__desc" id="viewSwitcherDesc">
+          Showing questions grouped by <strong>Data Structure</strong> category
+        </div>
+      </div>
+    </section>
+
     <!-- ─── Questions List ─── -->
     <section class="questions-section" id="questionsSection">
       <div id="questionsContainer">
-        <!-- Dynamically built category accordions -->
+        <!-- Dynamically built accordions (Category or Pattern view) -->
       </div>
       <div class="empty-state" id="emptyState" style="display:none">
         <svg viewBox="0 0 80 80" fill="none" width="80" height="80"><rect x="10" y="14" width="60" height="52" rx="8" stroke="#4b5563" stroke-width="2"/><path d="M26 36h28M26 44h20" stroke="#4b5563" stroke-width="2" stroke-linecap="round"/><circle cx="58" cy="56" r="14" fill="#1e232b" stroke="#6366f1" stroke-width="2"/><path d="M55 56l2 2 4-4" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
